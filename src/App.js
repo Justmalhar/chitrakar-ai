@@ -1,26 +1,57 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { ChakraProvider } from '@chakra-ui/react'
-import { Box, Button, Input, Spinner, Grid, Link, Flex, Text, Image } from '@chakra-ui/react';
+import { Box, Button, Input, Spinner, Grid, Link, Flex, Text, Image,  FormControl,
+  FormLabel,
+ Switch } from '@chakra-ui/react';
 import { Analytics } from '@vercel/analytics/react';
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+    apiKey: process.env.REACT_APP_OPENAI_API_KEY,
+    dangerouslyAllowBrowser: true
+});
 
 function App() {
   const [text, setText] = useState(''); // For the text input
   const [isLoading, setIsLoading] = useState(false); // To track loading state
   const [images, setImages] = useState([]); // To store the returned images
+  const [isEnhanced, setIsEnhanced] = useState(false);
 
 
   const handleReset = () => {
     setText(''); 
     setImages([]); 
   }
-
+  const chatGPTInstruction = "You are ChatGPT, an expert text-to-image prompt writer. Your primary responsibility is to accept input text in any given language. Upon receiving the input: 1. Translation: Immediately translate the text to English, ensuring the essence and context of the original description is retained. 2. Enhancement: Once translated, enhance the description according to the specified constraints: - Make the description detailed and suitable for DALL·E image generation. - Add elements to enrich the scene. - Clearly specify descent and gender for human characters to promote diversity. - Use qualifiers like 'photorealistic', 'lifelike', or 'hyper-realistic' to emphasize realism in the generated image. 3. Output: Provide the enhanced prompt to the user. This final prompt should be optimized for DALL·E, aiming to produce a photorealistic image that captures the essence of the user's initial description. Remember, your expertise lies in transforming a simple or complex description from any language into a detailed, photorealistic prompt suitable for DALL·E image generation. Only output the final enhanced prompt in English. Final Prompt:";
+  const chatCompletion = '';
   const handleGenerate = async () => {
   setIsLoading(true);
+  let finalText = text; // Start with the original text
+
+  if (isEnhanced) {
+    try {
+      const chatCompletion = await openai.chat.completions.create({
+        messages: [{ role: "system", content: chatGPTInstruction }, { role: "user", content: text }],
+        model: "gpt-3.5-turbo",
+        max_tokens: 500
+      });
+      
+      // Update the finalText to be the enhanced text
+      finalText = chatCompletion.choices[0].message.content;
+      setText(finalText); // Set the state if you want to display it in UI
+
+    } catch (chatError) {
+      console.error("ChatGPT call failed:", chatError);
+      setIsLoading(false);
+      return; // Exit if the ChatGPT call fails
+    }
+  }
+
   try {
     const API_URL = 'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image';
     const response = await axios.post(API_URL, {
-      text_prompts: [{ text }],
+      text_prompts: [{ 'text': finalText }],
       cfg_scale: 7,
       height: 1024,
       width: 1024,
@@ -86,14 +117,21 @@ return (
           focusBorderColor="purple.400"
         />
         
-        <Flex mb={5} justifyContent="center" spacing={4}>
-          <Button size="lg" colorScheme="purple" onClick={handleGenerate} mr={3} _hover={{ bg: "purple.700" }}>
+        <Flex mb={4} justifyContent="center" alignItems="center" spacing={4}>
+          <Button colorScheme="purple" onClick={handleGenerate} mr={3} _hover={{ bg: "purple.700" }}>
             Generate
           </Button>
-          <Button size="lg" colorScheme="red" onClick={handleReset} _hover={{ bg: "red.700" }}>
+          <Button colorScheme="red" onClick={handleReset} mr={3} _hover={{ bg: "red.700" }}>
             Reset
           </Button>
+          <FormControl display="flex" alignItems="center">
+            <FormLabel htmlFor="enhance-switch" mb="0" mr={2}>
+              Enhance Prompt
+            </FormLabel>
+            <Switch id="enhance-switch" isChecked={isEnhanced} onChange={(e) => setIsEnhanced(e.target.checked)} />
+          </FormControl>
         </Flex>
+
 
         {isLoading ? (
           <Box mt={5} textAlign="center">
